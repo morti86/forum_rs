@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::{extract::Path, middleware::from_fn, response::IntoResponse, routing::{get, put, post, delete}, Extension, Json, Router};
+use axum::{extract::{Query, Path}, middleware::from_fn, response::IntoResponse, routing::{get, put, post, delete}, Extension, Json, Router};
 use validator::Validate;
 use crate::AppState;
 use crate::{db::forum::ForumExt,
@@ -15,12 +15,13 @@ pub fn forum_handler() -> Router {
         role_check(state, req, next, vec![UserRole::Admin, UserRole::Mod]) );
 
     Router::new()
-        .route("/", get(get_sections))
-        .route("/section/{section_id}", get(get_threads))
+        .route("/list", get(get_sections))
+        .route("/section/{s_id}", get(get_threads))
         .route("/threads", post(create_thread))
         .route("/threads", delete(delete_thread).layer(admin_mod_only.clone()) )
         .route("/threads", put(update_thread))
         .route("/threads/{thread_id}", get(get_thread))
+        .route("/threads/{thread_id}", post(reply_thread))
         .route("/threads/lock", put(lock_thread).layer(admin_mod_only.clone()) )
         .route("/post", put(update_post))
         .route("/post", delete(delete_post))
@@ -94,15 +95,17 @@ pub async fn update_thread(Extension(app_state): Extension<Arc<AppState>>,
 }
 
 pub async fn get_thread(
-    Path((thread_id,page,limit)) : Path<(i64,i32,usize)>,
+    Path(thread_id) : Path<i64>,
+    Query(query_params): Query<forum::GetThreadsDto>,
     Extension(app_state): Extension<Arc<AppState>>,
 ) -> Result<impl IntoResponse, HttpError> {
+
 
     let thread = app_state.db_client.get_thread_info(thread_id)
         .await
         .map_err(|e| HttpError::server_error(e.to_string()))?;
 
-    let posts = app_state.db_client.get_thread(thread_id,page,limit)
+    let posts = app_state.db_client.get_thread(thread_id,query_params.page.unwrap_or(1),query_params.limit.unwrap_or(10))
         .await
         .map_err(|e| HttpError::server_error(e.to_string()))?;
 
@@ -146,17 +149,38 @@ pub async fn get_sections(
 }
 
 pub async fn get_threads(
-    Path((section_id,page,limit)) : Path<(i64,i32,usize)>,
+    Path(thread_id) : Path<i64>,
+    Query(query_params): Query<forum::GetThreadsDto>,
     Extension(app_state): Extension<Arc<AppState>>,
 ) -> Result<impl IntoResponse, HttpError> {
 
-    let threads = app_state.db_client.get_section(section_id, page, limit)
+    let threads = app_state.db_client.get_section(thread_id, query_params.page.unwrap_or(1), query_params.limit.unwrap_or(10))
         .await
         .map_err(|e| HttpError::server_error(e.to_string()))?;
 
     let response = forum::GetSectionResponseDto { threads };
 
     Ok(Json(response))
+}
+
+pub async fn reply_thread(Extension(app_state): Extension<Arc<AppState>>,
+    Extension(user): Extension<JWTAuthMiddeware>,
+    Json(body): Json<forum::ReplyThreadDto>,
+) -> Result<impl IntoResponse, HttpError> {
+    body.validate().map_err(|e| HttpError::bad_request(e.to_string()))?;
+    let user = &user.user;
+    let user_id = uuid::Uuid::parse_str(&user.id.to_string()).unwrap();
+
+    app_state.db_client.add_post(user_id, body.t_id, body.content.as_str(), body.post_id)
+        .await
+        .map_err(|e| HttpError::server_error(e.to_string()))?;
+    let response = forum::Response {
+        status: "success",
+        message: "post added".to_string(),
+    };
+
+    Ok(Json(response))
+
 }
 
 pub async fn update_post(Extension(app_state): Extension<Arc<AppState>>,

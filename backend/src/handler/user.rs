@@ -17,6 +17,7 @@ pub fn user_handler() -> Router {
 
     Router::new()
         .route("/me", get(get_me))
+        .route("/user/{uuid}", get(get_user_data))
         .route("/list", get(get_users))
         .route("/{user_id}/posts", get(user_posts))
         .route("/{user_id}/threads", get(user_threads))
@@ -73,6 +74,23 @@ pub async fn get_users(
     Ok(Json(response))
 }
 
+pub async fn get_user_data(
+    Path(uuid) : Path<uuid::Uuid>,
+    Extension(app_state): Extension<Arc<AppState>>,
+) -> Result<impl IntoResponse, HttpError> {
+    let user = app_state.db_client.get_user(Some(uuid), None, None)
+        .await
+        .map_err(|e| HttpError::server_error(e.to_string()))?;
+    let response = user::Response {
+        status: "success",
+        message: user.unwrap_or_else(|| crate::models::User { name: "Deleted User".to_string(), ..Default::default()}).name,
+    };
+
+    Ok(Json(response))
+
+
+}
+    
 pub async fn update_user_name(
     Extension(app_state): Extension<Arc<AppState>>,
     Extension(user): Extension<JWTAuthMiddeware>,
@@ -138,7 +156,7 @@ pub async fn update_user_password(
     let user_id = uuid::Uuid::parse_str(&user.id.to_string()).unwrap();
 
     let result = app_state.db_client
-        .get_user(Some(user_id.clone()), None, None, None)
+        .get_user(Some(user_id.clone()), None, None)
         .await
         .map_err(|e| HttpError::server_error(e.to_string()))?;
 

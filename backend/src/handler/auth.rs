@@ -76,7 +76,7 @@ pub async fn login(
        .map_err(|e| HttpError::bad_request(e.to_string()))?;
 
     let result = app_state.db_client
-        .get_user(None, Some(&body.username), Some(&body.email), None)
+        .get_user(None, Some(&body.username), None)
         .await
         .map_err(|e| HttpError::server_error(e.to_string()))?;
 
@@ -101,6 +101,7 @@ pub async fn login(
             .build();
 
         let response = axum::response::Json(user::UserLoginResponseDto {
+            role: user.role,
             status: "success".to_string(),
             token,
         });
@@ -129,7 +130,7 @@ pub async fn verify_email(
         .map_err(|e| HttpError::bad_request(e.to_string()))?;
 
     let result = app_state.db_client
-        .get_user(None, None, None, Some(&query_params.token))
+        .get_user(None, None, Some(&query_params.token))
         .await
         .map_err(|e| HttpError::server_error(e.to_string()))?;
 
@@ -191,7 +192,7 @@ pub async fn forgot_password(
        .map_err(|e| HttpError::bad_request(e.to_string()))?;
 
     let result = app_state.db_client
-            .get_user(None, None, Some(&body.email), None)
+            .get_user(None, Some(&body.email), None)
             .await
             .map_err(|e| HttpError::server_error(e.to_string()))?;
 
@@ -232,7 +233,7 @@ pub async fn reset_password(
         .map_err(|e| HttpError::bad_request(e.to_string()))?;
 
     let result = app_state.db_client
-        .get_user(None, None, None, Some(&body.token))
+        .get_user(None, None, Some(&body.token))
         .await
         .map_err(|e| HttpError::server_error(e.to_string()))?;
 
