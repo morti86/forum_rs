@@ -67,7 +67,7 @@ async fn main() -> Result<()> {
     };
 
     let cors = CorsLayer::new()
-        .allow_origin("http://localhost:{port}".parse::<HeaderValue>().unwrap())
+        .allow_origin(AllowOrigin::mirror_request())
         .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE])
         .allow_credentials(true)
         .allow_methods([Method::GET, Method::POST,Method::PUT,Method::DELETE]);

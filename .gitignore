@@ -18,3 +18,5 @@ target/
 
 **/*.vim
 **/Cargo.lock
+
+frontend-react/node_modules/**
